@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoteSafe</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--text:#1b2030;--mut:#667085;--line:#e2e6ee;--pri:#1d4ed8;--sel:#e7efff;--ok:#15803d;--bad:#b91c1c}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1218;--card:#181c25;--text:#eceff4;--mut:#98a2b3;--line:#2a303c;--pri:#6b9bff;--sel:#1f3157;--ok:#4ade80;--bad:#f87171}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--pri);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+header b{font-size:18px}header small{opacity:.85;display:block;font-size:12px}
+header a{color:#fff;font-size:13px;cursor:pointer;opacity:.9}
+main{max-width:680px;margin:0 auto;padding:12px 16px 50px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:12px 0}
+h2{margin:0 0 6px;font-size:20px}h3{margin:0 0 8px;font-size:16px}p{margin:6px 0}.mut{color:var(--mut);font-size:14px}
+label.f{display:block;font-size:13px;color:var(--mut);margin:12px 0 4px}
+input,textarea,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);font:inherit}
+button{padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}
+button.p{background:var(--pri);color:#fff;border-color:var(--pri);font-weight:600}button.d{color:var(--bad)}button.s{padding:6px 10px;font-size:13px}
+button:disabled{opacity:.5}.w{width:100%;margin-top:14px}.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.gap{display:flex;gap:8px}.gap>*{flex:1}
+.opt{display:flex;gap:12px;align-items:center;padding:14px;border:2px solid var(--line);border-radius:12px;margin:10px 0;cursor:pointer}
+.opt.sel{border-color:var(--pri);background:var(--sel)}.opt input{width:20px;height:20px;flex:none}.opt small{color:var(--mut);display:block}
+.bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden;margin:6px 0 14px}.bar i{display:block;height:100%;background:var(--pri)}
+.msg{padding:10px 12px;border-radius:10px;margin:10px 0;font-size:14px}.err{background:#fee2e2;color:#991b1b}.good{background:#dcfce7;color:#166534}.info{background:var(--sel)}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:8px 0}.tabs button{white-space:nowrap}.tabs .on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.badge{padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600;background:var(--sel)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stats div{text-align:center;background:var(--bg);border-radius:10px;padding:10px}.stats b{font-size:22px;display:block}
+.res{display:flex;justify-content:space-between;font-size:14px;margin-top:8px}.sc{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px 4px;text-align:left;border-bottom:1px solid var(--line)}
+.big{font-size:44px;text-align:center}.code{font:700 22px monospace;text-align:center;padding:10px;background:var(--bg);border-radius:10px;letter-spacing:2px}
+.modal{position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;padding:16px}.modal .card{max-width:420px;width:100%}
+</style></head><body>
+<header><div><b id="ttl">VoteSafe</b><small>Secure online voting</small></div><a onclick="location.hash=location.hash=='#admin'?'':'admin';boot()">Admin</a></header>
+<main id="app"></main>
+<script>
+var $=function(i){return document.getElementById(i)},T=null,A=null,St={},B=null,step=0,ch={},msg="",tab="o",R=null;
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function api(p,d,tok){return fetch("/api/"+p,{method:d?"POST":"GET",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(tok||"")},body:d?JSON.stringify(d):undefined}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||"Error");return j})})}
+function M(){var m=msg;msg="";return m?'<div class="msg '+(m[0]=="!"?"err":"good")+'">'+esc(m.slice(1))+'</div>':""}
+function boot(){api("status").then(function(s){St=s;$("ttl").textContent=s.title;document.title=s.title;location.hash=="#admin"?adminV():voterV()}).catch(function(e){$("app").innerHTML='<div class="card msg err">Cannot reach the server.</div>'})}
+function badge(s){return '<span class="badge">'+{draft:"Not started",open:"Voting open",closed:"Voting closed"}[s]+'</span>'}
+/* ---------- VOTER ---------- */
+function voterV(){
+ if(B)return ballotV();
+ var h='<div class="card"><h2>Welcome</h2><p class="mut">'+esc(St.title)+' &nbsp;'+badge(St.status)+'</p>';
+ if(St.status=="closed")h+='<button class="p w" onclick="resultsV()">View election results</button>';
+ h+='</div><div class="card"><h3>Log in to vote</h3><p class="mut">Enter the same details you registered with.</p>'+M()+
+ '<label class="f">Full name</label><input id="n" autocomplete="name" placeholder="e.g. Alice Namukasa"><label class="f">Email address</label><input id="e" type="email" autocomplete="email" placeholder="you@example.com"><label class="f">Phone number</label><input id="p" type="tel" autocomplete="tel" placeholder="e.g. 0772 000 001"><button class="p w" id="lb" onclick="login()">Continue</button></div>';
+ $("app").innerHTML=h;
+}
+function login(){$("lb").disabled=true;api("login",{name:$("n").value,email:$("e").value,phone:$("p").value}).then(function(r){T=r.token;return api("ballot",null,T)}).then(function(b){B=b;step=0;ch={};ballotV()}).catch(function(e){msg="!"+e.message;voterV()})}
+function ballotV(){
+ if(B.has_voted)return $("app").innerHTML='<div class="card"><div class="big">✅</div><h2 style="text-align:center">You have already voted</h2><p class="mut" style="text-align:center">Thank you, '+esc(B.name)+'. Your vote was recorded on '+esc(B.voted_at)+'. Each person can vote only once.</p><button class="w" onclick="out()">Log out</button></div>';
+ if(B.status!="open")return $("app").innerHTML='<div class="card"><h2>Voting is '+(B.status=="draft"?"not open yet":"closed")+'</h2><p class="mut">'+(B.status=="draft"?"Please come back when the election starts.":"The election has ended.")+'</p><button class="w" onclick="out()">Log out</button></div>';
+ var P=B.positions,n=P.length;
+ if(step>=n)return reviewV();
+ var p=P[step],h='<div class="card"><div class="mut">Hello, '+esc(B.name)+' · Step '+(step+1)+' of '+n+'</div><div class="bar"><i style="width:'+Math.round((step+1)*100/(n+1))+'%"></i></div><h2>'+esc(p.name)+'</h2><p class="mut">Tap one choice.</p>'+M();
+ p.candidates.forEach(function(c){h+='<label class="opt '+(ch[p.id]==c.id?"sel":"")+'"><input type="radio" name="o" '+(ch[p.id]==c.id?"checked":"")+' onchange="ch['+p.id+']='+c.id+';ballotV()"><span><b>'+esc(c.name)+'</b><small>'+esc(c.bio)+'</small></span></label>'});
+ h+='<label class="opt '+(ch[p.id]=="abstain"?"sel":"")+'"><input type="radio" name="o" '+(ch[p.id]=="abstain"?"checked":"")+' onchange="ch['+p.id+']=\'abstain\';ballotV()"><span>Abstain<small>I do not want to choose anyone for this position</small></span></label>';
+ h+='<div class="gap"><button onclick="'+(step?"step--;ballotV()":"out()")+'">'+(step?"← Back":"Cancel")+'</button><button class="p" onclick="nxt()">Next →</button></div></div>';
+ $("app").innerHTML=h;
+}
+function nxt(){if(!ch[B.positions[step].id]){msg="!Please pick a candidate or Abstain to continue.";return ballotV()}step++;ballotV()}
+function reviewV(){
+ var h='<div class="card"><h2>Review your choices</h2><p class="mut">Check carefully. After you submit, you cannot change or vote again.</p>'+M()+'<table>';
+ B.positions.forEach(function(p,i){var c=ch[p.id],nm=c=="abstain"?"Abstain":(p.candidates.filter(function(k){return k.id==c})[0]||{}).name;h+='<tr><td class="mut">'+esc(p.name)+'</td><td><b>'+esc(nm)+'</b></td><td><button class="s" onclick="step='+i+';ballotV()">Change</button></td></tr>'});
+ $("app").innerHTML=h+'</table><button class="p w" onclick="ask()">Submit my vote</button></div>';
+}
+function ask(){var d=document.createElement("div");d.className="modal";d.id="md";d.innerHTML='<div class="card"><h2>Submit your vote?</h2><p>This is final. You will not be able to vote again.</p><div class="gap"><button onclick="$(\'md\').remove()">Go back</button><button class="p" onclick="send()">Yes, submit</button></div></div>';document.body.appendChild(d)}
+function send(){$("md").remove();api("vote",{choices:ch},T).then(function(r){$("app").innerHTML='<div class="card"><div class="big">🎉</div><h2 style="text-align:center">Vote submitted</h2><p class="mut" style="text-align:center">Thank you for taking part. Keep this receipt number.</p><div class="code">'+r.receipt+'</div><button class="w" onclick="out()">Finish</button></div>';T=null;B=null}).catch(function(e){msg="!"+e.message;reviewV()})}
+function out(){T=null;B=null;ch={};step=0;boot()}
+function resultsV(){api("results").then(function(r){$("app").innerHTML='<div class="card"><h2>Official results</h2><p class="mut">'+esc(r.title)+'</p></div>'+resCards(r.results)+'<button class="w" onclick="boot()">Back</button>'}).catch(function(e){msg="!"+e.message;voterV()})}
+function resCards(rs){return rs.map(function(p){var t=p.candidates.reduce(function(a,c){return a+c.votes},0),mx=Math.max.apply(null,p.candidates.map(function(c){return c.votes}).concat([0])),w=p.candidates.filter(function(c){return c.votes==mx}).length;
+ return '<div class="card"><h3>'+esc(p.name)+'</h3>'+p.candidates.map(function(c){var pc=t?Math.round(c.votes*100/t):0;return '<div class="res"><span>'+esc(c.name)+(c.votes==mx&&mx>0?(w>1?" 🤝":" 🏆"):"")+'</span><b>'+c.votes+' ('+pc+'%)</b></div><div class="bar" style="margin:4px 0 8px"><i style="width:'+pc+'%"></i></div>'}).join("")+'<div class="mut">Abstained: '+p.abstain+(w>1&&mx>0?" · Tie for first place":"")+'</div></div>'}).join("")}
+/* ---------- ADMIN ---------- */
+function adminV(){
+ if(!A)return $("app").innerHTML='<div class="card"><h2>Administrator login</h2>'+M()+'<label class="f">Password</label><input id="ap" type="password"><button class="p w" onclick="alogin()">Log in</button><p class="mut">First-time password: Admin@123 (change it in Settings).</p></div>';
+ api("admin/dashboard",null,A).then(function(d){R=d;adminR()}).catch(function(e){A=null;msg="!"+e.message;adminV()});
+}
+function alogin(){api("admin/login",{password:$("ap").value}).then(function(r){A=r.token;adminV()}).catch(function(e){msg="!"+e.message;adminV()})}
+function act(p,d,ok,after){api(p,d,A).then(function(r){msg="+"+(typeof ok=="function"?ok(r):ok);adminV()}).catch(function(e){msg="!"+e.message;adminR()})}
+function adminR(){
+ var h='<div class="tabs">'+[["o","Overview"],["c","Candidates"],["v","Voters"],["s","Settings"]].map(function(t){return '<button class="'+(tab==t[0]?"on":"")+'" onclick="tab=\''+t[0]+'\';adminR()">'+t[1]+'</button>'}).join("")+'</div>'+M();
+ if(tab=="o"){var pc=R.registered?Math.round(R.voted*100/R.registered):0;
+  h+='<div class="card"><div class="row"><h2>'+esc(R.title)+'</h2>'+badge(R.status)+'</div><div class="stats"><div><b>'+R.registered+'</b>Registered</div><div><b>'+R.voted+'</b>Voted</div><div><b>'+pc+'%</b>Turnout</div></div><div class="bar" style="margin-top:12px"><i style="width:'+pc+'%"></i></div>'+
+  (R.status=="draft"?'<button class="p w" onclick="if(confirm(\'Open voting now? Voters will be able to log in and vote.\'))act(\'admin/status\',{status:\'open\'},\'Voting is now open.\')">▶ Open voting</button>':"")+
+  (R.status=="open"?'<button class="w" onclick="if(confirm(\'Close voting? No more votes will be accepted.\'))act(\'admin/status\',{status:\'closed\'},\'Voting closed. Results are now public.\')">■ Close voting &amp; publish results</button>':"")+
+  (R.status=="closed"?'<button class="w" onclick="exp()">⬇ Download results (CSV)</button>':"")+'</div><h3>Live results (admin only until closed)</h3>'+resCards(R.results);
+ }
+ if(tab=="c"){R.positions.forEach(function(p){h+='<div class="card"><div class="row"><h3>'+esc(p.name)+'</h3><button class="s d" onclick="del(\'position\','+p.id+')">Remove</button></div>'+p.candidates.map(function(c){return '<div class="row" style="margin:6px 0"><span>'+esc(c.name)+'</span><button class="s d" onclick="del(\'candidate\','+c.id+')">✕</button></div>'}).join("")+
+  '<div class="gap" style="margin-top:8px"><input id="cn'+p.id+'" placeholder="New candidate name"><button class="s" onclick="act(\'admin/candidate\',{position_id:'+p.id+',name:$(\'cn'+p.id+'\').value},\'Candidate added.\')">Add</button></div></div>'});
+  h+='<div class="card"><h3>Add a position</h3><div class="gap"><input id="np" placeholder="e.g. Organising Secretary"><button class="s" onclick="act(\'admin/position\',{name:$(\'np\').value},\'Position added.\')">Add</button></div></div>';}
+ if(tab=="v"){h+='<div class="card"><h3>Register a voter</h3><label class="f">Full name</label><input id="vn"><label class="f">Email</label><input id="ve" type="email"><label class="f">Phone</label><input id="vp" type="tel"><button class="p w" onclick="act(\'admin/voter\',{name:$(\'vn\').value,email:$(\'ve\').value,phone:$(\'vp\').value},\'Voter registered.\')">Add voter</button></div>'+
+  '<div class="card"><h3>Import many voters</h3><p class="mut">One per line: name,email,phone</p><textarea id="cv" rows="4" placeholder="Jane Doe,jane@mail.com,0772123456"></textarea><button class="w" onclick="act(\'admin/import\',{csv:$(\'cv\').value},function(r){return r.added+\' added, \'+r.skipped+\' skipped.\'})">Import</button></div>'+
+  '<div class="card"><h3>Voter list ('+R.registered+')</h3><div class="sc"><table><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr>'+R.voters.map(function(v){return '<tr><td>'+esc(v.name)+'<br><span class="mut">'+esc(v.phone)+'</span></td><td>'+esc(v.email)+'</td><td>'+(v.has_voted?"✅ Voted":"Not yet")+'</td><td>'+(v.has_voted?"":'<button class="s d" onclick="del(\'voter\','+v.id+')">✕</button>')+'</td></tr>'}).join("")+'</table></div></div>';}
+ if(tab=="s"){h+='<div class="card"><h3>Election title</h3><input id="tt" value="'+esc(R.title)+'"><button class="w" onclick="act(\'admin/title\',{title:$(\'tt\').value},\'Title saved.\')">Save title</button></div>'+
+  '<div class="card"><h3>Change password</h3><label class="f">Current password</label><input id="po" type="password"><label class="f">New password (8+ characters)</label><input id="pn" type="password"><button class="w" onclick="act(\'admin/password\',{old:$(\'po\').value,new:$(\'pn\').value},\'Password changed.\')">Change password</button></div>'+
+  '<div class="card"><h3>Activity log</h3><div class="sc"><table>'+R.audit.map(function(a){return '<tr><td class="mut">'+esc(a.ts)+'</td><td>'+esc(a.action)+'</td><td>'+esc(a.detail)}).join("</td></tr>")+'</td></tr></table></div></div>'+
+  '<div class="card"><h3>Start fresh</h3><p class="mut">Deletes all positions, candidates, voters and votes (including sample data).</p><button class="w d" onclick="if(confirm(\'Delete ALL election data? This cannot be undone.\'))act(\'admin/wipe\',{},\'All data cleared.\')">Clear all data</button></div>';}
+ $("app").innerHTML=h+'<button class="w" onclick="A=null;location.hash=\'\';boot()">Log out</button>';
+}
+function del(t,i){if(confirm("Remove this "+t+"?"))act("admin/delete",{type:t,id:i},"Removed.")}
+function exp(){fetch("/api/admin/export",{headers:{Authorization:"Bearer "+A}}).then(function(r){return r.blob()}).then(function(b){var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="election-results.csv";a.click()})}
+window.onhashchange=boot;boot();
+</script></body></html>
